@@ -1,0 +1,21 @@
+{
+  "netatmo": {
+    "client_id": "your_netatmo_app_client_id",
+    "client_secret": "your_netatmo_app_client_secret",
+    "username": "your-netatmo@email.com",
+    "password": "your-netatmo-password"
+  },
+  "ngenic": {
+    "client_id": "tune_web",
+    "client_secret": "c98ead25-07d7-4a47-9bcd-7d5c6a5f20d7",
+    "refresh_token": "your-very-long-ngenic-refresh-token"
+  },
+  "mapping": [
+    {
+      "ngenic_room_uuid": "11111111-2222-3333-4444-555555555555",
+      "netatmo_home_id": "1234567890abcdef1234567890abcdef",
+      "netatmo_room_id": "1234567890123456789"
+    }
+    // add more rooms if needed
+  ]
+}

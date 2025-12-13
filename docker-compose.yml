@@ -1,0 +1,31 @@
+
+            payload = {
+version: "3.8"
+
+services:
+  netatmo-ngenic-bridge:
+    build: .
+    container_name: netatmo-ngenic-bridge
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.json:/app/config.json:ro   # Mount your generated config.json
+    secrets:
+      - netatmo_client_id
+      - netatmo_client_secret
+      - netatmo_username
+      - netatmo_password
+      - ngenic_refresh_token
+
+secrets:
+  netatmo_client_id:
+    file: ./docker-secrets/netatmo_client_id
+  netatmo_client_secret:
+    file: ./docker-secrets/netatmo_client_secret
+  netatmo_username:
+    file: ./docker-secrets/netatmo_username
+  netatmo_password:
+    file: ./docker-secrets/netatmo_password
+  ngenic_refresh_token:
+    file: ./docker-secrets/ngenic_refresh_token
