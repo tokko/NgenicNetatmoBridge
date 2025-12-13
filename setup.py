@@ -3,81 +3,80 @@ import json
 import getpass
 import os
 import sys
+from rich.prompt import Prompt, IntPrompt
+from rich.console import Console
+from rich.panel import Panel
+
+console = Console()
 
 def create_netatmo_app():
-    print("\n=== Netatmo Developer App ===")
-    print("Go to: https://dev.netatmo.com/apps/")
-    print("Click 'Create an app'")
-    print("Fill in any name/description, no redirect URI needed.")
-    client_id = input("Enter your Netatmo Client ID: ").strip()
-    client_secret = input("Enter your Netatmo Client Secret: ").strip()
-    return client_id, client_secret
+    console.print(Panel("[bold blue]Netatmo Developer App[/bold blue]", expand=False))
+    console.print("Go to: [link=https://dev.netatmo.com/apps/]https://dev.netatmo.com/apps/[/]")
+    console.print("Click 'Create an app' → fill name/description → copy Client ID and Secret\n")
+    client_id = Prompt.ask("[bold]Netatmo Client ID[/bold]")
+    client_secret = Prompt.ask("[bold]Netatmo Client Secret[/bold]", password=True)
+    return client_id.strip(), client_secret.strip()
 
 def get_netatmo_token(client_id, client_secret):
-    print("\n=== Netatmo Login ===")
-    username = input("Netatmo email: ").strip()
-    password = getpass.getpass("Netatmo password: ")
-    
-    with httpx.Client() as client:
-        resp = client.post(
-            "https://api.netatmo.com/oauth2/token",
-            data={
-                "grant_type": "password",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "username": username,
-                "password": password,
-                "scope": "read_thermostat write_thermostat"
-            }
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        access_token = data["access_token"]
-        print("Netatmo authentication successful!")
-        return access_token, username, password
+    console.print(Panel("[bold blue]Netatmo Account Login[/bold blue]", expand=False))
+    username = Prompt.ask("Netatmo email")
+    password = getpass.getpass("Netatmo password (hidden): ")
+
+    with httpx.Client(timeout=30.0) as client:
+        try:
+            resp = client.post(
+                "https://api.netatmo.com/oauth2/token",
+                data={
+                    "grant_type": "password",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "username": username,
+                    "password": password,
+                    "scope": "read_thermostat write_thermostat"
+                }
+            )
+            resp.raise_for_status()
+        except Exception as e:
+            console.print(f"[red]Netatmo login failed: {e}[/red]")
+            sys.exit(1)
+
+    console.print("[green]✓ Netatmo authentication successful![/green]")
+    return resp.json()["access_token"], username, password
 
 def fetch_netatmo_homes(access_token):
-    print("\nFetching your Netatmo homes and rooms...")
+    console.print("\n[bold]Fetching your Netatmo homes and rooms...[/bold]")
     with httpx.Client() as client:
         resp = client.post(
             "https://api.netatmo.com/api/homesdata",
             headers={"Authorization": f"Bearer {access_token}"}
         )
         resp.raise_for_status()
-        body = resp.json()["body"]
-        
-        homes = body.get("homes", [])
-        if not homes:
-            print("No Netatmo Energy homes found (thermostat/valves).")
-            sys.exit(1)
-        
-        netatmo_rooms = []
-        for home in homes:
-            home_id = home["id"]
-            home_name = home.get("name", "Unnamed home")
-            print(f"\nHome: {home_name} (id: {home_id})")
-            for room in home.get("rooms", []):
-                room_id = room["id"]
-                room_name = room.get("name", "Unnamed room")
-                print(f"  - Room: {room_name} (id: {room_id})")
-                netatmo_rooms.append({
-                    "home_id": home_id,
-                    "home_name": home_name,
-                    "room_id": room_id,
-                    "room_name": room_name
-                })
-        return netatmo_rooms
+        homes = resp.json()["body"]["homes"]
+
+    netatmo_rooms = []
+    for home in homes:
+        home_id = home["id"]
+        home_name = home.get("name", "Unnamed home")
+        console.print(f"\n[bold cyan]Home:[/bold cyan] {home_name} (id: {home_id})")
+        for room in home.get("rooms", []):
+            room_id = room["id"]
+            room_name = room.get("name", "Unnamed room")
+            console.print(f"   • {room_name} → id: {room_id}")
+            netatmo_rooms.append({
+                "home_id": home_id,
+                "home_name": home_name,
+                "room_id": room_id,
+                "room_name": room_name
+            })
+    return netatmo_rooms
 
 def get_ngenic_refresh_token():
-    print("\n=== Ngenic Tune Refresh Token ===")
-    print("Instructions:")
-    print("1. Open https://tune.ngenic.com in a browser and log in.")
-    print("2. Open Developer Tools (F12) → Network tab")
-    print("3. Refresh the page")
-    print("4. Find a request to '/auth/token'")
-    print("5. In the request payload, copy the long 'refreshToken' value")
-    refresh_token = getpass.getpass("Paste your Ngenic refresh_token here: ").strip()
-    return refresh_token
+    console.print(Panel("[bold magenta]Ngenic Tune Refresh Token[/bold magenta]", expand=False))
+    console.print("1. Open [link=https://tune.ngenic.com]https://tune.ngenic.com[/] and log in")
+    console.print("2. Press F12 → Network tab → Refresh page")
+    console.print("3. Find request to '/auth/token' → copy the long 'refreshToken' from payload\n")
+    refresh_token = Prompt.ask("Paste refresh_token here", password=True)
+    return refresh_token.strip()
 
 def get_ngenic_access_token(refresh_token):
     with httpx.Client() as client:
@@ -91,132 +90,106 @@ def get_ngenic_access_token(refresh_token):
             }
         )
         resp.raise_for_status()
-        return resp.json()["accessToken"]
+    console.print("[green]✓ Ngenic token valid![/green]")
+    return resp.json()["accessToken"]
 
 def fetch_ngenic_rooms(access_token):
-    print("\nFetching your Ngenic Tune rooms...")
+    console.print("\n[bold]Fetching Ngenic Tune rooms...[/bold]")
     with httpx.Client() as client:
-        # First get all tunes (usually only one)
-        resp = client.get(
-            "https://api.ngenic.com/v3/tune/tunes",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        resp.raise_for_status()
-        tunes = resp.json()
-        
-        if not tunes:
-            print("No Ngenic Tunes found.")
-            sys.exit(1)
-        
+        tunes_resp = client.get("https://api.ngenic.com/v3/tune/tunes", headers={"Authorization": f"Bearer {access_token}"})
+        tunes_resp.raise_for_status()
+        tunes = tunes_resp.json()
+
         ngenic_rooms = []
         for tune in tunes:
-            tune_uuid = tune["uuid"]
             tune_name = tune.get("name", "My House")
-            print(f"\nTune: {tune_name} (uuid: {tune_uuid})")
-            
-            rooms_resp = client.get(
-                f"https://api.ngenic.com/v3/tune/tunes/{tune_uuid}/rooms",
-                headers={"Authorization": f"Bearer {access_token}"}
-            )
+            console.print(f"\n[bold cyan]Tune:[/bold cyan] {tune_name}")
+            rooms_resp = client.get(f"https://api.ngenic.com/v3/tune/tunes/{tune['uuid']}/rooms",
+                                    headers={"Authorization": f"Bearer {access_token}"})
             rooms_resp.raise_for_status()
             for room in rooms_resp.json():
-                room_uuid = room["uuid"]
-                room_name = room.get("name", "Unnamed room")
-                current_temp = room.get("currentTemperature")
-                print(f"  - Room: {room_name} (uuid: {room_uuid})  Current: {current_temp}°C")
-                ngenic_rooms.append({
-                    "room_uuid": room_uuid,
-                    "room_name": room_name
-                })
-        return ngenic_rooms
+                name = room.get("name", "Unnamed")
+                uuid = room["uuid"]
+                temp = room.get("currentTemperature")
+                console.print(f"   • {name} → uuid: {uuid} (current: {temp}°C)")
+                ngenic_rooms.append({"room_uuid": uuid, "room_name": name})
+    return ngenic_rooms
 
 def map_rooms(ngenic_rooms, netatmo_rooms):
-    print("\n=== Room Mapping ===")
-    print("Match each Ngenic room to the corresponding Netatmo room (by name or manually).")
-    
+    console.print(Panel("[bold yellow]Room Mapping[/bold yellow]", expand=False))
     mapping = []
     for ng_room in ngenic_rooms:
-        print(f"\nNgenic room: {ng_room['room_name']} (uuid: {ng_room['room_uuid']})")
-        print("Available Netatmo rooms:")
-        for i, nt_room in enumerate(netatmo_rooms):
-            print(f"  {i+1}: {nt_room['room_name']} (home: {nt_room['home_name']}, id: {nt_room['room_id']})")
-        
-        choice = input("Enter number (or 'skip' to ignore this room): ").strip()
-        if choice.lower() == 'skip':
+        console.print(f"\n[bold]Ngenic →[/bold] {ng_room['room_name']} (uuid: {ng_room['room_uuid']})")
+        console.print("Choose corresponding Netatmo room:")
+        for i, nt in enumerate(netatmo_rooms):
+            console.print(f"  [{i+1}] {nt['room_name']} ({nt['home_name']})")
+        console.print("  [skip] or [s] to skip this room")
+
+        choice = Prompt.ask("Your choice", choices=[str(i+1) for i in range(len(netatmo_rooms))] + ["skip", "s"], default="skip")
+        if choice in ["skip", "s"]:
             continue
-        try:
-            idx = int(choice) - 1
-            selected = netatmo_rooms[idx]
-            mapping.append({
-                "ngenic_room_uuid": ng_room["room_uuid"],
-                "netatmo_home_id": selected["home_id"],
-                "netatmo_room_id": selected["room_id"]
-            })
-            print(f"→ Mapped to Netatmo {selected['room_name']}")
-        except:
-            print("Invalid choice, skipping.")
+        idx = int(choice) - 1
+        selected = netatmo_rooms[idx]
+        mapping.append({
+            "ngenic_room_uuid": ng_room["room_uuid"],
+            "netatmo_home_id": selected["home_id"],
+            "netatmo_room_id": selected["room_id"]
+        })
+        console.print(f"[green]→ Mapped to[/green] {selected['room_name']}")
     return mapping
 
 def main():
-    print("Netatmo ← Ngenic Auto-Sync Bridge Setup Wizard")
-    
-    # Netatmo
+    console.print(Panel("[bold green]Netatmo ← Ngenic Bridge Setup Wizard[/bold green]", expand=False))
+
     client_id, client_secret = create_netatmo_app()
-    access_token, netatmo_username, netatmo_password = get_netatmo_token(client_id, client_secret)
-    netatmo_rooms = fetch_netatmo_homes(access_token)
-    
-    # Ngenic
-    ngenic_refresh = get_ngenic_refresh_token()
-    ngenic_access = get_ngenic_access_token(ngenic_refresh)
-    ngenic_rooms = fetch_ngenic_rooms(ngenic_access)
-    
-    # Mapping
+    netatmo_token, username, password = get_netatmo_token(client_id, client_secret)
+    netatmo_rooms = fetch_netatmo_homes(netatmo_token)
+
+    refresh_token = get_ngenic_refresh_token()
+    ngenic_token = get_ngenic_access_token(refresh_token)
+    ngenic_rooms = fetch_ngenic_rooms(ngenic_token)
+
     mapping = map_rooms(ngenic_rooms, netatmo_rooms)
     if not mapping:
-        print("No mappings created. Exiting.")
+        console.print("[red]No rooms mapped → exiting.[/red]")
         sys.exit(1)
-    
-    # Build config
+
+    # Write config.json
     config = {
         "netatmo": {
             "client_id": client_id,
             "client_secret": client_secret,
-            "username": netatmo_username,
-            "password": netatmo_password
+            "username": username,
+            "password": password
         },
         "ngenic": {
             "client_id": "tune_web",
             "client_secret": "c98ead25-07d7-4a47-9bcd-7d5c6a5f20d7",
-            "refresh_token": ngenic_refresh
+            "refresh_token": refresh_token
         },
         "mapping": mapping
     }
-    
-    # Write config.json
-    with open("config.json", "w") as f:
+
+    with open("/host/config.json", "w") as f:
         json.dump(config, f, indent=2)
-    print("\nconfig.json created!")
-    
-    # Create Docker secrets (run this in your Docker host directory)
-    print("\nCreating Docker secrets (save these commands or run them now):")
-    secrets_dir = "docker-secrets"
-    os.makedirs(secrets_dir, exist_ok=True)
-    
-    for key, value in [
-        ("netatmo_client_id", client_id),
-        ("netatmo_client_secret", client_secret),
-        ("netatmo_username", netatmo_username),
-        ("netatmo_password", netatmo_password),
-        ("ngenic_refresh_token", ngenic_refresh)
-    ]:
-        secret_file = f"{secrets_dir}/{key}"
-        with open(secret_file, "w") as f:
-            f.write(value)
-        print(f"echo '{value}' | docker secret create {key} -")
-        # Or: docker secret create {key} {secret_file}
-    
-    print("\nAll done!")
-    print("Now update your docker-compose.yml to use secrets (see below) and deploy!")
+    console.print("\n[green]✓ config.json written to host![/green]")
+
+    # Create secret files on host
+    os.makedirs("/host/docker-secrets", exist_ok=True)
+    secrets = {
+        "netatmo_client_id": client_id,
+        "netatmo_client_secret": client_secret,
+        "netatmo_username": username,
+        "netatmo_password": password,
+        "ngenic_refresh_token": refresh_token
+    }
+    for name, value in secrets.items():
+        path = f"/host/docker-secrets/{name}"
+        with open(path, "w") as f:
+            f.write(value + "\n")
+    console.print("[green]✓ All Docker secret files created in ./docker-secrets/[/green]")
+
+    console.print(Panel("[bold green]Setup complete![/bold green]\nNow run: [bold cyan]docker compose up -d --build[/bold cyan]", expand=False))
 
 if __name__ == "__main__":
     main()

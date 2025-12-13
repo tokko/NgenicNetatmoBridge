@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]
 httpx
+rich          # for beautiful interactive prompts in setup.py
