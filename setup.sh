@@ -1,3 +1,4 @@
+#!/bin/bash
 docker build -t netatmo-ngenic-setup .
 
 docker run --rm -it \
