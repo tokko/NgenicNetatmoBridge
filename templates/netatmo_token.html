@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Netatmo Temporary Token{% endblock %}
+{% block content %}
+<h2 class="mb-4">Step 2: Generate Temporary Netatmo Token</h2>
+<p class="text-muted mb-4">
+  In the same app page, scroll down to the <strong>Token generator</strong>.<br>
+  Select scopes: <code>read_thermostat</code> and <code>write_thermostat</code><br>
+  Click "Generate token" and copy the <strong>access_token</strong> (expires in 3 hours).
+</p>
+<form method="post" action="/step/netatmo-token">
+  <div class="mb-4">
+    <label for="temp_token" class="form-label">Temporary Access Token</label>
+    <input type="password" class="form-control" id="temp_token" name="temp_token" required autocomplete="off">
+  </div>
+  <button type="submit" class="btn btn-primary btn-lg">Validate & Continue →</button>
+</form>
+{% endblock %}

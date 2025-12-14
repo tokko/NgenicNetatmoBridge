@@ -41,21 +41,6 @@ if ! docker info | grep -q "Swarm: active"; then
 fi
 echo "✓ Swarm active"
 
-# --- 6. Clone the repository ---
-REPO_URL="https://github.com/yourusername/netatmo-ngenic-bridge.git"  # ← CHANGE TO YOUR REPO!
-PROJECT_DIR="netatmo-ngenic-bridge"
-
-echo "[6/7] Cloning repository..."
-if [ -d "$PROJECT_DIR" ]; then
-    echo "Directory $PROJECT_DIR already exists – pulling latest..."
-    cd $PROJECT_DIR
-    git pull
-    cd ..
-else
-    git clone "$REPO_URL" "$PROJECT_DIR"
-fi
-cd $PROJECT_DIR
-
 # --- 7. Build image, run setup, create secrets, launch service ---
 echo "[7/7] Building Docker image..."
 docker build -t netatmo-ngenic-bridge .

@@ -12,45 +12,32 @@ console = Console()
 def create_netatmo_app():
     console.print(Panel("[bold blue]Netatmo Developer App[/bold blue]", expand=False))
     console.print("Go to: [link=https://dev.netatmo.com/apps/]https://dev.netatmo.com/apps/[/]")
-    console.print("Click 'Create an app' → fill name/description → copy Client ID and Secret\n")
+    console.print("Log in with your Netatmo account → Create a new app (any name/description)\n")
     client_id = Prompt.ask("[bold]Netatmo Client ID[/bold]")
     client_secret = Prompt.ask("[bold]Netatmo Client Secret[/bold]", password=True)
     return client_id.strip(), client_secret.strip()
 
-def get_netatmo_token(client_id, client_secret):
-    console.print(Panel("[bold blue]Netatmo Account Login[/bold blue]", expand=False))
-    username = Prompt.ask("Netatmo email")
-    password = getpass.getpass("Netatmo password (hidden): ")
-
-    with httpx.Client(timeout=30.0) as client:
-        try:
-            resp = client.post(
-                "https://api.netatmo.com/oauth2/token",
-                data={
-                    "grant_type": "password",
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "username": username,
-                    "password": password,
-                    "scope": "read_thermostat write_thermostat"
-                }
-            )
-            resp.raise_for_status()
-        except Exception as e:
-            console.print(f"[red]Netatmo login failed: {e}[/red]")
-            sys.exit(1)
-
-    console.print("[green]✓ Netatmo authentication successful![/green]")
-    return resp.json()["access_token"], username, password
+def get_netatmo_access_token_for_setup(client_id, client_secret):
+    console.print(Panel("[bold blue]Generate Initial Netatmo Access Token[/bold blue]", expand=False))
+    console.print("1. Go to https://dev.netatmo.com/apps/")
+    console.print("2. Select your app")
+    console.print("3. Scroll down to 'Token generator' section")
+    console.print("4. Select scopes: [bold]read_thermostat[/bold] and [bold]write_thermostat[/bold]")
+    console.print("5. Click 'Generate token'")
+    console.print("6. Copy the [bold]access_token[/bold] (it lasts 3 hours – we only need it briefly)\n")
+    access_token = Prompt.ask("Paste the temporary access_token here", password=True)
+    return access_token.strip()
 
 def fetch_netatmo_homes(access_token):
     console.print("\n[bold]Fetching your Netatmo homes and rooms...[/bold]")
-    with httpx.Client() as client:
+    with httpx.Client(timeout=30.0) as client:
         resp = client.post(
             "https://api.netatmo.com/api/homesdata",
             headers={"Authorization": f"Bearer {access_token}"}
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            console.print(f"[red]Failed to fetch homes: {resp.status_code} {resp.text}[/red]")
+            sys.exit(1)
         homes = resp.json()["body"]["homes"]
 
     netatmo_rooms = []
@@ -68,6 +55,9 @@ def fetch_netatmo_homes(access_token):
                 "room_id": room_id,
                 "room_name": room_name
             })
+    if not netatmo_rooms:
+        console.print("[red]No thermostat rooms found. Make sure your app has thermostat scopes.[/red]")
+        sys.exit(1)
     return netatmo_rooms
 
 def get_ngenic_refresh_token():
@@ -89,7 +79,9 @@ def get_ngenic_access_token(refresh_token):
                 "refreshToken": refresh_token
             }
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            console.print(f"[red]Invalid Ngenic refresh token: {resp.text}[/red]")
+            sys.exit(1)
     console.print("[green]✓ Ngenic token valid![/green]")
     return resp.json()["accessToken"]
 
@@ -113,6 +105,9 @@ def fetch_ngenic_rooms(access_token):
                 temp = room.get("currentTemperature")
                 console.print(f"   • {name} → uuid: {uuid} (current: {temp}°C)")
                 ngenic_rooms.append({"room_uuid": uuid, "room_name": name})
+    if not ngenic_rooms:
+        console.print("[red]No Ngenic rooms found.[/red]")
+        sys.exit(1)
     return ngenic_rooms
 
 def map_rooms(ngenic_rooms, netatmo_rooms):
@@ -139,14 +134,15 @@ def map_rooms(ngenic_rooms, netatmo_rooms):
     return mapping
 
 def main():
-    console.print(Panel("[bold green]Netatmo ← Ngenic Bridge Setup Wizard[/bold green]", expand=False))
+    console.print(Panel("[bold green]Netatmo ← Ngenic Bridge Setup Wizard (Updated Dec 2025)[/bold green]", expand=False))
+    console.print("[bold yellow]Note:[/bold yellow] Netatmo password login is deprecated. We use manual token generation instead.\n")
 
     client_id, client_secret = create_netatmo_app()
-    netatmo_token, username, password = get_netatmo_token(client_id, client_secret)
-    netatmo_rooms = fetch_netatmo_homes(netatmo_token)
+    temp_access_token = get_netatmo_access_token_for_setup(client_id, client_secret)
+    netatmo_rooms = fetch_netatmo_homes(temp_access_token)
 
-    refresh_token = get_ngenic_refresh_token()
-    ngenic_token = get_ngenic_access_token(refresh_token)
+    refresh_token_ngenic = get_ngenic_refresh_token()
+    ngenic_token = get_ngenic_access_token(refresh_token_ngenic)
     ngenic_rooms = fetch_ngenic_rooms(ngenic_token)
 
     mapping = map_rooms(ngenic_rooms, netatmo_rooms)
@@ -154,18 +150,23 @@ def main():
         console.print("[red]No rooms mapped → exiting.[/red]")
         sys.exit(1)
 
-    # Write config.json
+    # Config now uses refresh_token for Netatmo (runtime app will handle refreshing)
+    # We'll prompt for Netatmo refresh_token separately (generated same way as access_token)
+    console.print(Panel("[bold blue]Netatmo Long-Lived Refresh Token[/bold blue]", expand=False))
+    console.print("Now generate a refresh token the same way:")
+    console.print("Repeat the 'Generate token' step → copy the [bold]refresh_token[/bold] (long one)\n")
+    netatmo_refresh = Prompt.ask("Paste your Netatmo refresh_token here", password=True).strip()
+
     config = {
         "netatmo": {
             "client_id": client_id,
             "client_secret": client_secret,
-            "username": username,
-            "password": password
+            "refresh_token": netatmo_refresh
         },
         "ngenic": {
             "client_id": "tune_web",
             "client_secret": "c98ead25-07d7-4a47-9bcd-7d5c6a5f20d7",
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token_ngenic
         },
         "mapping": mapping
     }
@@ -174,14 +175,13 @@ def main():
         json.dump(config, f, indent=2)
     console.print("\n[green]✓ config.json written to host![/green]")
 
-    # Create secret files on host
+    # Create secret files on host (now includes netatmo_refresh_token instead of username/password)
     os.makedirs("/host/docker-secrets", exist_ok=True)
     secrets = {
         "netatmo_client_id": client_id,
         "netatmo_client_secret": client_secret,
-        "netatmo_username": username,
-        "netatmo_password": password,
-        "ngenic_refresh_token": refresh_token
+        "netatmo_refresh_token": netatmo_refresh,
+        "ngenic_refresh_token": refresh_token_ngenic
     }
     for name, value in secrets.items():
         path = f"/host/docker-secrets/{name}"

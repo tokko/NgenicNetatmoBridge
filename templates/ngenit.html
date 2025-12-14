@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Ngenic Refresh Token{% endblock %}
+{% block content %}
+<h2 class="mb-4">Step 3: Ngenic Tune Refresh Token</h2>
+<p class="text-muted mb-4">
+  1. Open <a href="https://tune.ngenic.com" target="_blank">tune.ngenic.com</a> and log in.<br>
+  2. Press F12 → Network tab → Refresh the page.<br>
+  3. Find a request to <code>/auth/token</code> → copy the long <code>refreshToken</code> from the request payload.
+</p>
+<form method="post" action="/step/ngenic">
+  <div class="mb-4">
+    <label for="refresh_token" class="form-label">Ngenic Refresh Token</label>
+    <input type="password" class="form-control" id="refresh_token" name="refresh_token" required autocomplete="off">
+  </div>
+  <button type="submit" class="btn btn-primary btn-lg">Validate & Continue →</button>
+</form>
+{% endblock %}

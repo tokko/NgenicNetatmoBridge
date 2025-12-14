@@ -1,0 +1,21 @@
+
+{% extends "base.html" %}
+{% block title %}Netatmo App Credentials{% endblock %}
+{% block content %}
+<h2 class="mb-4">Step 1: Netatmo Developer App</h2>
+<p class="text-muted mb-4">
+  Go to <a href="https://dev.netatmo.com/apps/" target="_blank">https://dev.netatmo.com/apps/</a>,
+  create an app (any name), and copy the Client ID and Client Secret.
+</p>
+<form method="post" action="/step/netatmo-app">
+  <div class="mb-3">
+    <label for="client_id" class="form-label">Client ID</label>
+    <input type="text" class="form-control" id="client_id" name="client_id" required>
+  </div>
+  <div class="mb-4">
+    <label for="client_secret" class="form-label">Client Secret</label>
+    <input type="password" class="form-control" id="client_secret" name="client_secret" required>
+  </div>
+  <button type="submit" class="btn btn-primary btn-lg">Next →</button>
+</form>
+{% endblock %}

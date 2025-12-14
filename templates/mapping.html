@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Room Mapping{% endblock %}
+{% block content %}
+<h2 class="mb-4">Step 4: Map Rooms</h2>
+<p class="text-muted mb-4">Match each Ngenic room to the corresponding Netatmo room.</p>
+<form method="post" action="/step/mapping">
+  {% for ng_room in ngenic_rooms %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Ngenic: {{ ng_room.name or "Unnamed" }}</h5>
+      <p class="text-muted small">UUID: {{ ng_room.uuid }}</p>
+      <select name="ngenic_{{ ng_room.uuid }}" class="form-select" required>
+        <option value="" disabled selected>— Select Netatmo room —</option>
+        {% for i, nt_room in enumerate(netatmo_rooms) %}
+        <option value="{{ i }}">{{ nt_room.room_name }} ({{ nt_room.home_name }})</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  {% endfor %}
+  <button type="submit" class="btn btn-primary btn-lg">Next →</button>
+</form>
+{% endblock %}

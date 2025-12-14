@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Final Step – Netatmo Refresh Token{% endblock %}
+{% block content %}
+<h2 class="mb-4">Final Step: Netatmo Long-Lived Refresh Token</h2>
+<p class="text-muted mb-4">
+  Go back to your Netatmo app page and generate a token again.<br>
+  This time, copy the <strong>refresh_token</strong> (the long one) — this is permanent.
+</p>
+<form method="post" action="/complete">
+  <div class="mb-4">
+    <label for="netatmo_refresh_token" class="form-label">Netatmo Refresh Token</label>
+    <input type="password" class="form-control" id="netatmo_refresh_token" name="netatmo_refresh_token" required autocomplete="off">
+  </div>
+  <button type="submit" class="btn btn-success btn-lg">Complete Setup</button>
+</form>
+{% endblock %}
