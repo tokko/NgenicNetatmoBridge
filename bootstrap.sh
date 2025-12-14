@@ -2,55 +2,52 @@
 set -e  # Exit on any error
 
 echo "=================================================="
-echo " Netatmo ← Ngenic Bridge - Full Bootstrap Script"
+echo " Netatmo ← Ngenic Bridge - Bootstrap for Raspberry Pi 5"
+echo " (Raspberry Pi OS 64-bit Bookworm)"
 echo "=================================================="
 echo
 
 # --- 1. Update system & install basics ---
-echo "[1/6] Updating system and installing vim, git, wget..."
-sudo apt update && sudo apt upgrade -y
+echo "[1/7] Updating system and installing vim, git, wget..."
+sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y vim git wget ca-certificates curl gnupg lsb-release
 
-# --- 2. Install Docker Engine ---
-echo "[2/6] Installing Docker Engine..."
-if ! command -v docker &> /dev/null; then
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-      https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
-      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# --- 2. Add Docker's official GPG key ---
+echo "[2/7] Adding Docker GPG key..."
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-    sudo apt update
-    sudo apt install -y docker-ce docker-ce-cli containerd.io
-    sudo usermod -aG docker $USER
-fi
-echo "✓ Docker installed"
+# --- 3. Add Docker repository (Debian Bookworm for arm64) ---
+echo "[3/7] Adding Docker repository..."
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+  bookworm stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# --- 3. Install Docker Compose (v2 plugin) ---
-echo "[3/6] Installing Docker Compose plugin..."
-if ! docker compose version &> /dev/null; then
-    DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)
-    sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-$(uname -m)" \
-         -o /usr/local/lib/docker/cli-plugins/docker-compose
-    sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-fi
-echo "✓ Docker Compose installed ($(docker compose version))"
+sudo apt update
 
-# --- 4. Initialize Docker Swarm (single node) ---
-echo "[4/6] Initializing Docker Swarm (single-node mode for secrets support)..."
+# --- 4. Install Docker Engine + Compose plugin ---
+echo "[4/7] Installing Docker Engine and Compose plugin..."
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Add current user to docker group
+sudo usermod -aG docker $USER
+echo "✓ Docker installed (you may need to log out/in for group changes)"
+
+# --- 5. Initialize Docker Swarm (single-node for secrets support) ---
+echo "[5/7] Initializing Docker Swarm (single-node mode)..."
 if ! docker info | grep -q "Swarm: active"; then
     docker swarm init --advertise-addr $(hostname -I | awk '{print $1}')
 fi
 echo "✓ Swarm active"
 
-# --- 5. Clone the repository ---
-REPO_URL="https://github.com/tokko/netatmo-ngenic-bridge.git"  # ← CHANGE THIS!
+# --- 6. Clone the repository ---
+REPO_URL="https://github.com/yourusername/netatmo-ngenic-bridge.git"  # ← CHANGE TO YOUR REPO!
 PROJECT_DIR="netatmo-ngenic-bridge"
 
-echo "[5/6] Cloning repository..."
+echo "[6/7] Cloning repository..."
 if [ -d "$PROJECT_DIR" ]; then
-    echo "Directory $PROJECT_DIR already exists – pulling latest changes..."
+    echo "Directory $PROJECT_DIR already exists – pulling latest..."
     cd $PROJECT_DIR
     git pull
     cd ..
@@ -59,17 +56,18 @@ else
 fi
 cd $PROJECT_DIR
 
-# --- 6. Build image, run setup, then launch service ---
-echo "[6/6] Building Docker image..."
+# --- 7. Build image, run setup, create secrets, launch service ---
+echo "[7/7] Building Docker image..."
 docker build -t netatmo-ngenic-bridge .
 
 echo
 echo "=================================================="
-echo " Starting INTERACTIVE SETUP (this will guide you)"
+echo " Starting INTERACTIVE SETUP"
+echo " Follow the prompts to enter credentials and map rooms"
 echo "=================================================="
 echo
 
-# Run the setup in a temporary container that writes to host
+# Run interactive setup in temporary container
 docker run --rm -it \
   -v "$(pwd):/host" \
   netatmo-ngenic-bridge \
@@ -77,27 +75,31 @@ docker run --rm -it \
 
 echo
 echo "=================================================="
-echo " Setup complete! Launching the service..."
+echo " Creating Docker Swarm secrets from generated files..."
 echo "=================================================="
 
-# Create Docker secrets from the files generated by setup.py
-echo "Creating Docker secrets..."
 for secret_file in docker-secrets/*; do
     secret_name=$(basename "$secret_file")
-    if docker secret ls --filter name="$secret_name" | grep -q "$secret_name"; then
-        echo "Secret $secret_name already exists, skipping..."
+    if docker secret ls --filter name="$secret_name" | grep -q "^$secret_name "; then
+        echo "Secret $secret_name already exists – skipping"
     else
         docker secret create "$secret_name" "$secret_file"
         echo "Created secret: $secret_name"
     fi
 done
 
-# Launch the stack
+echo
+echo "=================================================="
+echo " Launching the service with docker compose..."
+echo "=================================================="
+
 docker compose up -d --build
 
 echo
 echo "=================================================="
-echo " ALL DONE!"
-echo " Service is running at http://$(hostname -I | awk '{print $1}'):8000"
-echo " Check status: docker compose logs -f"
+echo " ALL DONE! 🎉"
+echo " Your Netatmo ← Ngenic bridge is now running"
+echo " API available at: http://$(hostname -I | awk '{print $1}'):8000"
+echo " View logs: docker compose logs -f"
+echo " Status check: curl http://localhost:8000/status"
 echo "=================================================="
